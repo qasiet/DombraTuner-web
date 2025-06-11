@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>冬不拉调音器</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #f5f1ec;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    .mode-select {
+      margin-bottom: 20px;
+    }
+    .note-buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+    .note-buttons button {
+      padding: 10px 20px;
+      font-size: 18px;
+      background-color: #6B4F3A;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tuner {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .note {
+      font-size: 80px;
+      margin: 10px 0;
+    }
+    .freq {
+      font-size: 32px;
+      margin: 10px 0;
+    }
+    .gauge-container {
+      width: 220px;
+      height: 120px;
+      margin: 20px auto;
+      position: relative;
+    }
+    .gauge {
+      width: 100%;
+      height: 100%;
+      background: conic-gradient(#ccc 0deg, #ccc 90deg, #000 90deg, #000 270deg, #ccc 270deg);
+      border-radius: 50% 50% 0 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .needle {
+      width: 4px;
+      height: 100%;
+      background: red;
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform-origin: bottom center;
+      transition: transform 0.2s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <h1>冬不拉调音器</h1>
+  <div class="mode-select">
+    <label>选择调音模式：</label>
+    <select id="modeSelector">
+      <option value="A2,D3">tomen ong burau（上A2 / 下D3）</option>
+      <option value="G2,D3">sol burau （上G2 / 下D3）</option>
+    </select>
+  </div>
+  <div class="note-buttons">
+    <button id="string1">A2</button>
+    <button id="string2">D3</button>
+  </div>
+  <div class="tuner">
+    <div class="note" id="note">--</div>
+    <div class="freq" id="freq">-- Hz</div>
+    <div class="gauge-container">
+      <div class="gauge">
+        <div class="needle" id="needle"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const noteElem = document.getElementById('note');
+    const freqElem = document.getElementById('freq');
+    const needle = document.getElementById('needle');
+    const modeSelector = document.getElementById('modeSelector');
+    const btn1 = document.getElementById('string1');
+    const btn2 = document.getElementById('string2');
+
+    const noteFreqs = {
+      'A2': 110.00,
+      'D3': 146.83,
+      'G2': 98.00,
+    };
+
+    let currentNote = 'A2';
+
+    function updateMode(mode) {
+      const [top, bottom] = mode.split(',');
+      btn1.textContent = top;
+      btn2.textContent = bottom;
+    }
+
+    modeSelector.addEventListener('change', () => {
+      updateMode(modeSelector.value);
+    });
+
+    btn1.addEventListener('click', () => {
+      currentNote = btn1.textContent;
+    });
+
+    btn2.addEventListener('click', () => {
+      currentNote = btn2.textContent;
+    });
+
+    // 获取麦克风音频
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const audioCtx = new AudioContext();
+      const analyser = audioCtx.createAnalyser();
+      const mic = audioCtx.createMediaStreamSource(stream);
+      mic.connect(analyser);
+
+      const data = new Float32Array(analyser.fftSize);
+      const pitchDetector = PitchDetector.forFloat32Array(analyser.fftSize);
+
+      function analyze() {
+        analyser.getFloatTimeDomainData(data);
+        const pitch = pitchDetector.findPitch(data, audioCtx.sampleRate);
+        if (pitch) {
+          const expected = noteFreqs[currentNote];
+          const diff = pitch - expected;
+          const angle = Math.max(-60, Math.min(60, diff * 2)); // 控制转动角度范围
+          noteElem.textContent = currentNote;
+          freqElem.textContent = pitch.toFixed(2) + ' Hz';
+          needle.style.transform = `rotate(${angle}deg)`;
+        }
+        requestAnimationFrame(analyze);
+      }
+
+      analyze();
+    });
+
+    // 简化 Pitch 检测工具
+    const PitchDetector = {
+      forFloat32Array(size) {
+        return {
+          findPitch(data, sampleRate) {
+            let max = 0;
+            let index = 0;
+            for (let i = 1; i < data.length; i++) {
+              if (Math.abs(data[i]) > max) {
+                max = Math.abs(data[i]);
+                index = i;
+              }
+            }
+            const frequency = sampleRate / index;
+            return frequency > 50 && frequency < 1000 ? frequency : null;
+          }
+        };
+      }
+    };
+
+    updateMode('A2,D3'); // 初始化默认模式
+  </script>
+</body>
+</html>
